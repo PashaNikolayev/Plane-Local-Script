@@ -1,0 +1,1987 @@
+wait(0.25)
+if not game.Players.LocalPlayer:FindFirstChild("Plane") then
+	repeat wait() until game.Players.LocalPlayer:FindFirstChild("Plane")
+end
+
+local Players = game:GetService("Players")
+local newPlayerEvent = Instance.new("RemoteEvent")
+newPlayerEvent.Parent = game.ReplicatedStorage
+newPlayerEvent.Name = "NewPlayer"
+local function onPlayerAdded(player)
+	newPlayerEvent:FireAllClients()
+end print("wawaweewa")
+
+local RbxUtility = require(game:GetService("ReplicatedStorage"):
+    WaitForChild("LoadLibrary"):WaitForChild("RbxUtility"))
+local create = assert(RbxUtility).Create
+local UserInputService	= game:GetService 'UserInputService'
+local Event = game.ReplicatedStorage:WaitForChild("ClientConnection")
+local Active = true
+local Tool = script.Parent
+local ToolIsEquipped = false
+
+if not game.Players.LocalPlayer:FindFirstChild("Plane").Value then
+	repeat wait() until game.Players.LocalPlayer:FindFirstChild("Plane").Value
+end
+
+local Parts = game.Players.LocalPlayer:FindFirstChild("Plane").Value;
+
+wait(0.25)
+
+local tankStats = Parts:FindFirstChild("Stats");
+local Vehicle = Parts.Parent
+local VehicleGun = Vehicle:FindFirstChild("Hull")
+local PlayerCam = game.Workspace.CurrentCamera
+local CameraPos = VehicleGun:WaitForChild("BarrelMain")
+local CameraPos2 = VehicleGun:WaitForChild("BarrelMain")
+local Settings = require(Parts.Parent.VehicleSettings)
+
+repeat wait() until Tool:FindFirstChild("SeatFinder")
+repeat wait() until Parts:FindFirstChild("LandDetector")
+
+local Source = Parts:FindFirstChild("LandDetector")	
+
+local Player = game.Players.LocalPlayer
+local Seat = Tool:FindFirstChild("SeatFinder").Value
+local SpeedValue = Tool:FindFirstChild("CurrentSpeed")
+local CharHuma = Player.Character:WaitForChild("Humanoid")
+
+local FireRate = Settings.SecondaryGunFirerate
+local ReFireDelay = FireRate*2
+local FlashColor = "Daisy orange"
+local TracerFlashColor = Settings.SecondaryFlashColor
+
+local DivisionOnly = Settings.IsDivisionOnly
+local GroupOnly = Settings.IsGroupOnly
+local GroupID = Settings.GroupID
+local DivisionID = Settings.DivisionID
+
+local GroupRankSufficient = false
+local DivRankSufficient = false
+local HasPermit = false
+local OnBarrelView = false
+local CanSwitchCams = true
+local IsZoomed = false
+local AimLocked = false
+
+local Delta				= Vector2.new ( )
+local Rotation			= Vector2.new ( )
+local MaxDelta			= 0.3
+
+local GroupRank
+local DivisionRank
+
+local CanFire1 = true
+local CanFire2 = true
+
+local Accelerating = false
+local Decelerating = false
+local Engine = Parts:FindFirstChild("Engine")
+local MaxBank = Settings.VehicleMaxBank
+
+local Acceleration = Settings.VehicleSpeedAdder
+local MaxSpeed = Settings.VehicleMaxFSpeed
+local StallSpeed = Settings.VehicleStallSpeed
+local VehicleRollSpeed = Settings.VehicleRollSpeed
+local VehicleTurnSpeed = Settings.VehicleTurnSpeed
+local VehiclePitchSpeed = Settings.VehiclePitchSpeed
+local ThrottleInc = Settings.VehicleThrottleInc
+local MaxBank = Settings.VehicleMaxBank
+local ReloadTimes = Settings.ReloadTimes
+local MaxAltitude = Settings.MaxAltitude
+local MinAltitude = Settings.MinAltitude
+
+local TrueAirSpeed = 0
+local CurrentSpeed = 0
+local CurrentTurn = 0
+local Throttle = 0
+local DesiredSpeed = 0
+local CurrentGear = "DOWN"
+local GoingLeft = false
+local GoingRight = false
+local FiringGuns = false
+local Stalling = false
+local PullUpWarning = false
+local LockedOn = false
+local Crashed = false
+local CanDisplayPosNotif = true
+local CanDisplayNegNotif = true
+local PosNotifCounter = 0
+local NegNotifCounter = 0
+local NotifCounterAdder1 = 0.02
+local NotifCounterAdder2 = 0.02
+
+local VSX,X = 0,0
+local VSY,Y = 0,0
+local DeadZoneX = 0
+local DeadZoneY = 0
+local OnDeadZoneX = 0
+local OnDeadZoneY = 0
+local DeadZoneOffset = 0
+
+local FreeLook = false
+local CanSnap = true
+
+local IgnoreList = {
+	Vehicle
+}
+
+local FTab = {}
+local IgnoreTable = {}
+
+local CanCrash = false
+local HugeVector = Vector3.new(math.huge,math.huge,math.huge)
+
+local SUAK = false
+local SDAK = false
+
+local Thrust = Engine.Thrust
+local Direction = Engine.Direction
+
+local LandingGear = {}
+local VehicleParts = {}
+local GearUp = false
+
+local LockedCam = true
+
+local RunService = game:GetService("RunService")
+
+local MGDamage = {
+	Min = 30,
+	Max = 80
+}
+
+local creator = Instance.new("ObjectValue")
+creator.Name = "creator"
+creator.Value = game.Players.LocalPlayer
+
+local LightsOn = false
+local Reloading = false
+local Reloading2 = false
+local Closed = false
+
+local TeamKill = false
+
+-- Player's tank GUI
+GUI = game.Players.LocalPlayer.PlayerGui.TankGUI
+
+local GroupRankSufficient = false
+local DivRankSufficient = false
+local HasPermit = false
+
+Player.Character.Humanoid.Died:connect(function()
+	local ShouldDelete = true
+	game.Debris:AddItem(script,5)
+	while script do
+	PlayerCam.CameraType = "Custom"
+	Player.CameraMode = Enum.CameraMode.Classic
+	Player.CameraMaxZoomDistance = 400
+	Player.CameraMinZoomDistance = .5
+	game:GetService('UserInputService').MouseDeltaSensitivity = 1
+	wait()
+	end
+end)
+
+function CheckIfInGroup()
+	if Settings.IsGroupOnly == true or Settings.IsDivisionOnly == true then
+	
+	DivisionRank = Player:GetRankInGroup(Settings.DivisionID)
+	GroupRank = Player:GetRankInGroup(Settings.GroupID)
+
+	local DivisionRankReq = Settings.DivisionRank
+	local GroupRankReq = Settings.GroupRank
+	local ToolNameForBypass = Settings.ToolNameForBypass
+
+		if GroupRank >= GroupRankReq or DivisionRank >= DivisionRankReq or Player.Backpack:FindFirstChild(ToolNameForBypass) then
+			if GroupRank >= GroupRankReq then
+			print("Group Rank Sufficient")	
+			end
+			if DivisionRank >= DivisionRankReq then
+			print("Div Rank Sufficient")	
+			end
+			if Player.Backpack:FindFirstChild(ToolNameForBypass) then
+			print("Has Permit")	
+			end
+			
+			GroupRankSufficient = true
+			DivRankSufficient = true
+			HasPermit = true
+			return true
+		else
+			return false		
+		end	
+		
+	end
+end
+
+--[[GUI.HP.Hitpoints.Text = Parts.Parent.Damage.Value
+GUI.HP.Damage.Text =  Parts.Stats.RoundDamageMin.Value.."-"..Parts.Stats.RoundDamageMax.Value
+GUI.HP.HullArmor.Text = Parts.Stats.Hull.Front.Value .. "/" .. Parts.Stats.Hull.Side.Value .. "/" .. Parts.Stats.Hull.Rear.Value
+GUI.HP.TurretArmor.Text =  Parts.Stats.Turret.Front.Value .. "/" .. Parts.Stats.Turret.Side.Value .. "/" .. Parts.Stats.Turret.Rear.Value
+GUI.HP.Caliber.Text = Parts.Stats.RoundPenetrationMin.Value.."-"..Parts.Stats.RoundPenetrationMax.Value
+]]
+
+--CurrentRound = tankStats.Round; -- Current loaded ammo (AP/HE)
+myMouse = nil;
+PlayerMouse = Player:GetMouse()
+
+function CorrectGUIColors(Target)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].ClassName == "Frame" or list[i].ClassName == "TextLabel" then
+			list[i].BackgroundColor3 = Settings.MainGUIColor
+				if list[i].ClassName == "TextLabel" then
+					list[i].TextColor3 = Settings.MainGUIColor
+				end
+			if list[i].Parent.Name == "PosNotification" then
+				list[i].BackgroundColor3 = Settings.MainGUIColor
+				if list[i].ClassName == "TextLabel" then
+					list[i].TextColor3 = Settings.MainGUIColor
+				end
+			elseif list[i].Parent.Name == "NegNotification" then
+				list[i].BackgroundColor3 = Settings.WarningColor
+				if list[i].ClassName == "TextLabel" then
+					list[i].TextColor3 = Settings.WarningColor
+				end
+			elseif list[i].Parent.Name == "ReticleMain" or list[i].Parent.Name == "ReticleBox"
+				or list[i].Parent.Name == "Reticle" then
+				list[i].BackgroundColor3 = Settings.WarningColor
+				if list[i].ClassName == "TextLabel" then
+					list[i].TextColor3 = Settings.WarningColor
+				end
+			elseif list[i].Parent.Name == "DeadZoneReticle" then
+				list[i].BackgroundColor3 = Settings.WarningColor
+				if list[i].ClassName == "TextLabel" then
+					list[i].TextColor3 = Settings.WarningColor
+				end
+			end
+		elseif list[i].ClassName == "BillboardGui" then
+			
+		end
+		CorrectGUIColors(list[i])
+	end
+end
+
+function updateAmmo()
+	--GUI.Hit.Position = UDim2.new(0, PlayerMouse.X-22.5, 0, PlayerMouse.Y-22.5)
+	GUI.Sights.Position = UDim2.new(0,
+		PlayerMouse.X - (GUI.Sights.Size.X.Offset/2),
+		0,
+		PlayerMouse.Y - (GUI.Sights.Size.Y.Offset/2))
+	
+	CorrectGUIColors(GUI)
+	
+	if Parts:FindFirstChild("AimRef") then
+		UpdateAimCircle(Parts.AimRef)	
+	end
+	
+	if ToolIsEquipped then
+		GUI.Enabled = true
+	else
+		
+	end
+	
+	if Parts.Parent.Damage.Value <= 0 then
+		--Vehicle.Parts:findFirstChild("VehicleSeat").Disabled = true
+		--Player.Character.Humanoid.Jump = true		
+	end
+	if ToolIsEquipped then
+		local Hitpoints = Parts.Parent.Damage
+		local Ammo1 = Parts.Stats.Ammo1
+		local Ammo2 = Parts.Stats.Ammo2
+		local LoadedAmmo1 = Parts.Stats.LoadedAmmo1
+		local LoadedAmmo2 = Parts.Stats.LoadedAmmo2
+		
+		local DisplayAltitude = Tool:FindFirstChild("CurrentAltitude")
+		local DisplaySpeed = Tool:FindFirstChild("CurrentSpeed")
+		local DisplayThrottle = Tool:FindFirstChild("CurrentThrottle")
+		
+		DisplayAltitude.Value = Engine.Position.Y
+		DisplaySpeed.Value = CurrentSpeed
+		DisplayThrottle.Value = Throttle*100
+		
+		if OnBarrelView then
+		GUI.InteriorFrame.Visible = false
+		--[[GUI.ReloadWindow1.Visible = false
+		GUI.ReloadWindow2.Visible = false
+		GUI.ReloadWindow3.Visible = false]]
+		GUI.Scope.Visible = false
+		GUI.Shadings.Visible = false
+		GUI.Sights.Visible = false
+		GUI.Stats.Visible = true
+		GUI.AimingReticle.Enabled = true
+		GUI.Notifications.Visible = true
+		GUI.DeadZone.Visible = true
+		GUI.DeadZoneReticle.Visible = true
+		
+		GUI.DeadZone.Size = UDim2.new(0,DeadZoneY*100,0,DeadZoneY*100)
+		GUI.DeadZone.Position = UDim2.new(0.5,-GUI.DeadZone.Size.X.Offset/2,0.5,-((GUI.DeadZone.Size.Y.Offset/2)+(36/2)))
+		GUI.DeadZoneReticle.Size = GUI.DeadZone.Size
+		
+		if OnDeadZoneX == 0 and OnDeadZoneY == 0 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				0,
+				PlayerMouse.X - (GUI.DeadZoneReticle.Size.X.Offset/2),
+				0,
+				PlayerMouse.Y - (GUI.DeadZoneReticle.Size.Y.Offset/2))
+		elseif OnDeadZoneX == 1 and OnDeadZoneY == 1 then
+			GUI.DeadZoneReticle.Position =  GUI.DeadZone.Position
+		elseif OnDeadZoneX == 1 and OnDeadZoneY == 0 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				GUI.DeadZone.Position.X.Scale,
+				GUI.DeadZone.Position.X.Offset,
+				0,
+				PlayerMouse.Y - (GUI.DeadZoneReticle.Size.Y.Offset/2))
+		elseif OnDeadZoneX == 0 and OnDeadZoneY == 1 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				0,
+				PlayerMouse.X - (GUI.DeadZoneReticle.Size.X.Offset/2),
+				GUI.DeadZone.Position.Y.Scale,
+				GUI.DeadZone.Position.Y.Offset)
+		end				
+		DeadZoneOffset = GUI.DeadZone.Size.X.Offset
+		
+		local BoxL1 = GUI.Stats:FindFirstChild("BoxL1")
+		local BoxR1 = GUI.Stats:FindFirstChild("BoxR1")
+		
+		local BoxL2 = GUI.Stats:FindFirstChild("BoxL2")
+		local BoxR2 = GUI.Stats:FindFirstChild("BoxR2")
+		
+		BoxL1:FindFirstChild("ValName").Text = "SPD"
+		BoxL1:FindFirstChild("Val").Text = DisplaySpeed.Value
+		
+		BoxR1:FindFirstChild("ValName").Text = "ALT"
+		BoxR1:FindFirstChild("Val").Text = DisplayAltitude.Value
+		
+		BoxL2:FindFirstChild("ValName1").Text = "THRTL"
+		BoxL2:FindFirstChild("Val1").Text = DisplayThrottle.Value
+		BoxL2:FindFirstChild("ValName2").Text = "GEAR"
+		BoxL2:FindFirstChild("Val2").Text = CurrentGear
+		BoxL2:FindFirstChild("ValName3").Text = "DMG"
+		BoxL2:FindFirstChild("Val3").Text = ((Parts.Parent.MaxHealth.Value-Hitpoints.Value)/10).."%"
+		BoxL2:FindFirstChild("ValName4").Text = ""
+		BoxL2:FindFirstChild("Val4").Text = ""
+		BoxL2:FindFirstChild("ValName5").Text = ""
+		BoxL2:FindFirstChild("Val5").Text = ""
+		
+		BoxR2:FindFirstChild("ValName1").Text = "Gun"
+		BoxR2:FindFirstChild("Val1").Text = LoadedAmmo2.Value
+		BoxR2:FindFirstChild("ValName2").Text = "AAM"
+		BoxR2:FindFirstChild("Val2").Text = "0"
+		BoxR2:FindFirstChild("ValName3").Text = "AGM"
+		BoxR2:FindFirstChild("Val3").Text = "0"
+		BoxR2:FindFirstChild("ValName4").Text = ""
+		BoxR2:FindFirstChild("Val4").Text = ""
+		BoxR2:FindFirstChild("ValName5").Text = ""
+		BoxR2:FindFirstChild("Val5").Text = ""
+		
+			if (Stalling == true or PullUpWarning == true) and CanCrash == true then
+				NegNotifCounter = NegNotifCounter + NotifCounterAdder1
+				if NegNotifCounter >= Settings.NegNotificationCooldown then
+					NegNotifCounter = 0
+					if CanDisplayNegNotif == true then
+						CanDisplayNegNotif = false
+						GUI.Notifications:FindFirstChild("NegNotification").Visible = false
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = ""
+					else
+						CanDisplayNegNotif = true
+						GUI.Notifications:FindFirstChild("NegNotification").Visible = true
+						
+						if Stalling == true then
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = "STALL WARNING"
+						elseif PullUpWarning == true then
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = "PULL UP"
+						end
+						
+					end
+				end
+			elseif (Stalling == false and PullUpWarning == false) or CanCrash == false then
+				NegNotifCounter = 0
+				CanDisplayNegNotif = true
+				GUI.Notifications:FindFirstChild("NegNotification").Visible = false
+				GUI.Notifications:FindFirstChild("NegNotification").Val.Text = ""
+			end
+		
+		else
+		GUI.InteriorFrame.Visible = false
+		--[[GUI.ReloadWindow1.Visible = false
+		GUI.ReloadWindow2.Visible = false
+		GUI.ReloadWindow3.Visible = false]]
+		GUI.Scope.Visible = false
+		GUI.Shadings.Visible = false
+		GUI.Sights.Visible = false
+		GUI.Stats.Visible = true
+		GUI.AimingReticle.Enabled = true
+		GUI.Notifications.Visible = true
+		GUI.DeadZone.Visible = true
+		GUI.DeadZoneReticle.Visible = true
+		
+		GUI.DeadZone.Size = UDim2.new(0,DeadZoneY*100,0,DeadZoneY*100)
+		GUI.DeadZone.Position = UDim2.new(0.5,-GUI.DeadZone.Size.X.Offset/2,0.5,-((GUI.DeadZone.Size.Y.Offset/2)+(36/2)))
+		GUI.DeadZoneReticle.Size = GUI.DeadZone.Size
+		
+		if OnDeadZoneX == 0 and OnDeadZoneY == 0 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				0,
+				PlayerMouse.X - (GUI.DeadZoneReticle.Size.X.Offset/2),
+				0,
+				PlayerMouse.Y - (GUI.DeadZoneReticle.Size.Y.Offset/2))
+		elseif OnDeadZoneX == 1 and OnDeadZoneY == 1 then
+			GUI.DeadZoneReticle.Position =  GUI.DeadZone.Position
+		elseif OnDeadZoneX == 1 and OnDeadZoneY == 0 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				GUI.DeadZone.Position.X.Scale,
+				GUI.DeadZone.Position.X.Offset,
+				0,
+				PlayerMouse.Y - (GUI.DeadZoneReticle.Size.Y.Offset/2))
+		elseif OnDeadZoneX == 0 and OnDeadZoneY == 1 then
+			GUI.DeadZoneReticle.Position =  UDim2.new(
+				0,
+				PlayerMouse.X - (GUI.DeadZoneReticle.Size.X.Offset/2),
+				GUI.DeadZone.Position.Y.Scale,
+				GUI.DeadZone.Position.Y.Offset)
+		end				
+		DeadZoneOffset = GUI.DeadZone.Size.X.Offset
+		
+		local BoxL1 = GUI.Stats:FindFirstChild("BoxL1")
+		local BoxR1 = GUI.Stats:FindFirstChild("BoxR1")
+		
+		local BoxL2 = GUI.Stats:FindFirstChild("BoxL2")
+		local BoxR2 = GUI.Stats:FindFirstChild("BoxR2")
+		
+		BoxL1:FindFirstChild("ValName").Text = "SPD"
+		BoxL1:FindFirstChild("Val").Text = DisplaySpeed.Value
+		
+		BoxR1:FindFirstChild("ValName").Text = "ALT"
+		BoxR1:FindFirstChild("Val").Text = DisplayAltitude.Value
+		
+		BoxL2:FindFirstChild("ValName1").Text = "THRTL"
+		BoxL2:FindFirstChild("Val1").Text = DisplayThrottle.Value
+		BoxL2:FindFirstChild("ValName2").Text = "GEAR"
+		BoxL2:FindFirstChild("Val2").Text = CurrentGear
+		BoxL2:FindFirstChild("ValName3").Text = "DMG"
+		BoxL2:FindFirstChild("Val3").Text = ((Parts.Parent.MaxHealth.Value-Hitpoints.Value)/10).."%"
+		BoxL2:FindFirstChild("ValName4").Text = ""
+		BoxL2:FindFirstChild("Val4").Text = ""
+		BoxL2:FindFirstChild("ValName5").Text = ""
+		BoxL2:FindFirstChild("Val5").Text = ""
+		
+		BoxR2:FindFirstChild("ValName1").Text = "Gun"
+		BoxR2:FindFirstChild("Val1").Text = LoadedAmmo2.Value
+		BoxR2:FindFirstChild("ValName2").Text = "AAM"
+		BoxR2:FindFirstChild("Val2").Text = "0"
+		BoxR2:FindFirstChild("ValName3").Text = "AGM"
+		BoxR2:FindFirstChild("Val3").Text = "0"
+		BoxR2:FindFirstChild("ValName4").Text = ""
+		BoxR2:FindFirstChild("Val4").Text = ""
+		BoxR2:FindFirstChild("ValName5").Text = ""
+		BoxR2:FindFirstChild("Val5").Text = ""
+		
+			if (Stalling == true or PullUpWarning == true) and CanCrash == true then
+				NegNotifCounter = NegNotifCounter + NotifCounterAdder1
+				if NegNotifCounter >= Settings.NegNotificationCooldown then
+					NegNotifCounter = 0
+					if CanDisplayNegNotif == true then
+						CanDisplayNegNotif = false
+						GUI.Notifications:FindFirstChild("NegNotification").Visible = false
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = ""
+					else
+						CanDisplayNegNotif = true
+						GUI.Notifications:FindFirstChild("NegNotification").Visible = true
+						
+						if Stalling == true then
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = "STALL WARNING"
+						elseif PullUpWarning == true then
+						GUI.Notifications:FindFirstChild("NegNotification").Val.Text = "PULL UP"
+						end
+						
+					end
+				end
+			elseif (Stalling == false and PullUpWarning == false) or CanCrash == false then
+				NegNotifCounter = 0
+				CanDisplayNegNotif = true
+				GUI.Notifications:FindFirstChild("NegNotification").Visible = false
+				GUI.Notifications:FindFirstChild("NegNotification").Val.Text = ""
+			end
+		
+		end
+	end		
+end
+
+Parts.Parent.Damage.Changed:Connect(function(NewValue)
+    if NewValue <= 0 then
+	
+	local CamFix = GUI:findFirstChild("CameraFix")
+	local CamFixC = CamFix:Clone()
+	CamFixC.Parent = Player.PlayerGui
+	CamFixC.Disabled = false
+	
+	--[[Event:FireServer({
+		["Function"] = "VehicleDestroyed",
+		["Client"] = Player,
+		["Seat"] = Seat,
+		["Vehicle"] = Vehicle,
+		--["FireScript"] = Tool["FireMainGun"]
+		
+		})]]
+	
+		--Vehicle.Parts:findFirstChild("VehicleSeat").Disabled = true
+		--Player.Character.Humanoid.Jump = true		
+	end
+end)
+
+function Door(Target,bool)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "Hatch" then
+			if bool then
+				if list[i]:FindFirstChild("Rotator") then
+					list[i]:FindFirstChild("Rotator").TargetAngle = 90
+				end			
+			elseif not bool then
+				if list[i]:FindFirstChild("Rotator") then
+					list[i]:FindFirstChild("Rotator").TargetAngle = 0
+				end
+			end
+		end
+	end
+end
+
+function ListVehicleParts(Target)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i]:IsA("BasePart") and list[i].Parent.Name ~= "GearF"
+		and list[i].Parent.Name ~= "GearL" and list[i].Parent.Name ~= "GearR"
+	 	and list[i].Parent.Name ~= "Parts" then
+			VehicleParts[#VehicleParts+1] = list[i]
+		
+		elseif list[i].ClassName == "Model" then
+			ListVehicleParts(list[i])		
+		end
+	end
+end
+
+function VehiclePartCollision(hit)
+	if (CanCrash and CurrentSpeed >= Settings.CrashingSpeed) and Crashed == false then
+		if hit.Parent ~= CharHuma.Parent and hit.Parent.Parent ~= CharHuma.Parent 
+		and hit.Parent.Parent.Parent ~= CharHuma.Parent then
+			if hit.Parent.Parent:FindFirstChild("Humanoid") then
+			else
+				if hit.Name ~= "Tracer" and hit.Name ~= "Ray" and hit.Name ~= "SparkyBrick" then
+					if hit.Parent.Parent ~= Vehicle then
+						if Vehicle:FindFirstChild("Destroyed").Value == false and Vehicle:FindFirstChild("Damage").Value > 0 then
+							local HitPart = VehicleParts[math.random(1,#VehicleParts)]
+							local HitSound = HitPart.Parent:findFirstChild("Pen")
+							local HitPos = HitPart.CFrame.p
+							Crashed = true
+							Event:FireServer({
+								["Function"] = "Penetrate",
+								["Client"] = Player,
+								["Hit"] = HitPart,
+								["HitPos"] = HitPos,
+								["HitSound"] = HitSound,
+								["Color"] = FlashColor,
+								["DecayTime"] = HitSound.TimeLength,
+								["HitCal"] = 0,
+								["MinP"] = 99999999999999,
+								["MaxP"] = 99999999999999,
+								["MinD"] = 99999999999999,
+								["MaxD"] = 99999999999999,
+								["CurrentDamage"] = 0,
+								["IsDestroyed"] = false,
+								["CanNotif"] = false,
+							["ToolName"] = "Crash"})
+							ResetCamZooms()	
+							PlayerCam.CameraType = "Custom"
+							game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+						end
+					end
+				end
+			end	
+		end
+	end
+end
+
+--ListVehicleParts(Vehicle)
+
+for i = 1, #VehicleParts do
+	if VehicleParts[i]:IsA("BasePart") then
+		--VehicleParts[i].Touched:connect(VehiclePartCollision)
+	end
+end
+
+function UpdateDeadZoneBox(Target,Val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].ClassName == "Frame" then
+			if list[i].Parent.Name == "DeadZone" then
+				if OnDeadZoneX == 0 and OnDeadZoneY == 0 then
+					list[i].BackgroundTransparency = 0.8					
+				elseif OnDeadZoneX == 1 and OnDeadZoneY == 1 then
+					list[i].BackgroundTransparency = 0.2		
+				elseif OnDeadZoneX == 1 and OnDeadZoneY == 0 then
+					list[i].BackgroundTransparency = 0.6		
+				elseif OnDeadZoneX == 0 and OnDeadZoneY == 1 then
+					list[i].BackgroundTransparency = 0.6		
+				end
+			elseif list[i].Parent.Name == "DeadZoneReticle" then
+				if OnDeadZoneX == 0 and OnDeadZoneY == 0 then
+					list[i].BackgroundTransparency = 0.2					
+				elseif OnDeadZoneX == 1 and OnDeadZoneY == 1 then
+					list[i].BackgroundTransparency = 0.8		
+				elseif OnDeadZoneX == 1 and OnDeadZoneY == 0 then
+					list[i].BackgroundTransparency = 0.6		
+				elseif OnDeadZoneX == 0 and OnDeadZoneY == 1 then
+					list[i].BackgroundTransparency = 0.6		
+				end
+			end
+			UpdateDeadZoneBox(list[i],Val)
+		end
+	end
+end
+
+function AimCircleTransparency(Target,Val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].ClassName == "Frame" then
+			if list[i].Name ~= "ReticleMain" and list[i].Name ~= "ReticleBox" then
+				list[i].BackgroundTransparency = (Val/100)*0.075
+			end
+			AimCircleTransparency(list[i],Val)
+		end
+	end
+end
+
+function UpdateAimCircle(Target)
+	local AimingReticleBase = Target		
+	local Aimoffset = (AimingReticleBase.CFrame.upVector).unit * 1000;
+	local AimingReticleRay = Ray.new(AimingReticleBase.Position, Aimoffset);	
+	local AimingHit, AimPos = workspace:FindPartOnRayWithIgnoreList(AimingReticleRay, IgnoreList);	
+	local AimDistRef = (AimPos - AimingReticleBase.Position).magnitude;			
+	GUI.AimingReticle.Adornee = Target
+	GUI.AimingReticle.ExtentsOffsetWorldSpace = Vector3.new(0,AimDistRef*10,0)		
+	AimCircleTransparency(GUI.AimingReticle.ReticleMain,AimDistRef)
+end
+
+function Door(Target,bool)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "Hatch" then
+			if bool then
+				if list[i]:FindFirstChild("Rotator") then
+					list[i]:FindFirstChild("Rotator").TargetAngle = 90
+				end			
+			elseif not bool then
+				if list[i]:FindFirstChild("Rotator") then
+					list[i]:FindFirstChild("Rotator").TargetAngle = 0
+				end
+			end
+		end
+	end
+end
+
+function Flip()
+	game:GetService("RunService").RenderStepped:wait()	
+	return true
+end
+
+function Brakes()
+	game:GetService("RunService").RenderStepped:wait()	
+	return true
+end
+
+function GetPlayer(hit)
+	if hit and hit.Parent then
+		if hit.Parent:FindFirstChild("Humanoid") then
+			return hit.Parent.Humanoid
+		elseif hit.Parent.Parent:FindFirstChild("Humanoid") then
+			return hit.Parent.Parent.Humanoid
+		end
+	end
+end
+
+function Reload()
+	local Ammo = Parts.Stats.Ammo1
+	local LoadedAmmo = Parts.Stats.LoadedAmmo1
+	if not Reloading and Ammo.Value > 0 then
+		local ReloadTime = Settings.MainGunReloadTime
+		local Loaded = false
+		local Timer = 0
+		Reloading=true;
+		updateAmmo()
+		--print("Shell Animation")
+		for i = 7, 1, -1 do
+			wait(ReloadTime/8);
+			Timer = Timer + 1
+			if Timer >= 2 and Loaded == false then
+				GUI.ShellSound:Play()
+				Loaded = true
+			end			
+		end
+		wait(ReloadTime/8);
+		if Timer >= 7 then
+			if not OnBarrelView then
+			local ReloadWindowExitAnim = GUI.ReloadWindow1.ReloadWindowAnimation:Clone()
+			ReloadWindowExitAnim.Parent = GUI.ReloadWindow1
+			ReloadWindowExitAnim.Disabled = false
+			game.Debris:AddItem(ReloadWindowExitAnim,5)
+			end
+		Timer = 0
+		Reloading = false;
+		if Ammo.Value >= Settings.MainGunClipSize then
+			LoadedAmmo.Value = Settings.MainGunClipSize
+		elseif Ammo.Value < Settings.MainGunClipSize then
+			LoadedAmmo.Value = Ammo.Value
+		end				
+		end
+	end
+end
+
+function Reload2()
+	local Ammo = Parts.Stats.Ammo2
+	local LoadedAmmo = Parts.Stats.LoadedAmmo2
+	if not Reloading2 and Ammo.Value > 0 then
+		local ReloadTime = Settings.MainGunReloadTime
+		local Loaded = false
+		local Timer = 0
+		Reloading2=true;
+		updateAmmo()
+		--print("Shell Animation")
+		for i = 7, 1, -1 do
+			wait(ReloadTime/8);
+			Timer = Timer + 1
+			if Timer >= 2 and Loaded == false then
+				GUI.ShellSound:Play()
+				Loaded = true
+			end			
+		end
+		wait(ReloadTime/8);
+		if Timer >= 7 then
+			if not OnBarrelView then
+			local ReloadWindowExitAnim = GUI.ReloadWindow3.ReloadWindowAnimation:Clone()
+			ReloadWindowExitAnim.Parent = GUI.ReloadWindow3
+			ReloadWindowExitAnim.Disabled = false
+			game.Debris:AddItem(ReloadWindowExitAnim,5)
+			end
+		Timer = 0
+		Reloading2 = false;
+		if Ammo.Value >= Settings.SecondaryGunClipSize then
+			LoadedAmmo.Value = Settings.SecondaryGunClipSize
+		elseif Ammo.Value < Settings.SecondaryGunClipSize then
+			LoadedAmmo.Value = Ammo.Value
+		end				
+		end
+	end
+end
+
+function FireGuns(GunParent) --This function creates the bullets for the MachineGuns
+	while FiringGun and not Reloading2 do
+		for _,v in pairs(GunParent:GetChildren()) do --This is what allow you to put as many MachineGuns as you want in the Guns folder
+			if v:IsA("BasePart") then
+				if v.Name == "Coax" then
+					local Ammo = Parts.Stats.Ammo2
+					local LoadedAmmo = Parts.Stats.LoadedAmmo2
+					if Ammo.Value <= 0 or LoadedAmmo.Value <= 0 then
+						Reload2()
+						FiringGun = false
+					end;
+					
+					local machineGun = v
+					Ammo.Value = Ammo.Value - 1
+					LoadedAmmo.Value = LoadedAmmo.Value - 1
+					local Spread = Settings.SecondaryGunSpread
+					if IsZoomed == true then
+						Spread = Settings.SecondaryGunSpread2
+					end
+					local offset = (machineGun.CFrame * CFrame.new(math.random(-Spread,Spread),100,math.random(-Spread,Spread)).p
+					- machineGun.Position).unit * 9999999;
+					local ray = Ray.new(machineGun.Position, offset);
+					
+					--local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, IgnoreList)
+					local hitPart, hitPos = workspace:FindPartOnRayWithIgnoreList(ray, IgnoreList);
+						
+					local length, orientation = (hitPos - machineGun.Position).magnitude,
+						CFrame.new(machineGun.Position, hitPos)		
+					
+					local DirectionUnit = (hitPos - machineGun.Position).unit	
+					
+					local laser1 = rayPart:clone()
+					laser1.CFrame = CFrame.new(machineGun.Position, hitPos)
+										* CFrame.new(0, 0, -length/2)
+					laser1.Size	= Vector3.new(1,1,1);
+					laser1.Mesh.Scale = Vector3.new(0.13, 0.13, length)
+					
+					laser1.Parent = workspace
+					laser1.Material = Enum.Material.SmoothPlastic
+					laser1.Transparency = 0.8
+					game.Debris:AddItem(laser1, 0.07)
+					Event:FireServer({["Function"] = "RayVehicleMG",
+						["Client"] = Player,
+						["Color"] = laser1.BrickColor,
+						["Vehicle"] = Vehicle,
+						["FlashColor"] = "Daisy orange",
+						["Orientation"] = orientation,
+						["Length"] = length,
+						["Thickness"] = Settings.raythickness,
+						["Barrel"] = machineGun,
+						["Decay"] = Settings.raydecaytime,
+						["EndPos"] = hitPos,
+						["LaserTransparency"] = laser1.Transparency})
+							
+					local DirectionUnit = (hitPos - machineGun.Position).unit
+					
+					local TracerSize = math.random(2,3)
+								
+					local TrueTracer = Instance.new("Part")
+					TrueTracer.Parent = game.Workspace
+					TrueTracer.CanCollide = false
+					TrueTracer.Anchored = false
+					TrueTracer.Material = Enum.Material.Neon
+					TrueTracer.BrickColor = BrickColor.new("Daisy orange")
+					TrueTracer.Size = Vector3.new(TracerSize * 0.1,TracerSize * 0.1 ,math.random(5,10))
+					TrueTracer.Name = "Tracer"			
+					TrueTracer.CFrame = CFrame.new(machineGun.Position, hitPos)
+					local TrueTracerMesh = Instance.new("SpecialMesh")
+					TrueTracerMesh.Parent = TrueTracer
+					TrueTracerMesh.Name = "TracerMesh"
+					TrueTracerMesh.MeshType = "Sphere"
+					TrueTracerMesh.Scale = Vector3.new(1,1,1)
+					TrueTracerMesh.Offset = Vector3.new(0,0,-5)
+					
+					game.Debris:AddItem(TrueTracer, length*0.001)
+					
+					TrueTracer.Transparency = 1
+					local TracerOffset = math.random(Settings.SecondaryMinTracerOffset,
+						Settings.SecondaryMaxTracerOffset)
+					local Att1 = Instance.new("Attachment")	Att1.Name = "Att1"
+					Att1.Parent = TrueTracer
+					Att1.Position = Vector3.new(0,0,TracerOffset)
+					
+					local Att2 = Instance.new("Attachment")
+					Att2.Name = "Att2"
+					Att2.Parent = TrueTracer
+					Att2.Position = Vector3.new(0,0,-TracerOffset)
+								
+					local TracerBeam = Instance.new("Beam")
+					TracerBeam.LightEmission = 1
+					TracerBeam.LightInfluence = 0
+					TracerBeam.Transparency = NumberSequence.new(0)			
+					TracerBeam.Texture = "rbxassetid://"..Settings.SecondaryTracerBeam
+					TracerBeam.TextureLength = 1
+					TracerBeam.TextureMode = "Stretch"
+					TracerBeam.TextureSpeed = 0
+					TracerBeam.Name = "TracerBeam"
+					TracerBeam.Parent = TrueTracer
+					TracerBeam.Attachment0 = Att1
+					TracerBeam.Attachment1 = Att2
+					TracerBeam.FaceCamera = true
+					TracerBeam.Segments = 1
+					TracerBeam.Width0 = math.random(Settings.SecondaryMinTracerBeamWidth,
+						Settings.SecondaryMaxTracerBeamWidth)*0.1
+					TracerBeam.Width1 = TracerBeam.Width0
+					--TracerBeam.Enabled = false	
+					
+					local TracerSize = math.random(Settings.SecondaryMinTracerImageSize,
+						Settings.SecondaryMaxTracerImageSize)
+					
+					local TracerImage = Instance.new("BillboardGui")
+					TracerImage.LightInfluence = 0
+					TracerImage.Name = "TracerImage"
+					TracerImage.Parent = TrueTracer
+					TracerImage.Adornee = TrueTracer
+					TracerImage.Size = UDim2.new(TracerSize,0,TracerSize,0)
+					
+					local TracerImageLabel = Instance.new("ImageLabel")
+					TracerImageLabel.BackgroundTransparency = 1
+					TracerImageLabel.BorderSizePixel = 0
+					TracerImageLabel.Parent = TracerImage
+					TracerImageLabel.Size = UDim2.new(1,0,1,0)
+					TracerImageLabel.Image = "rbxassetid://"..Settings.SecondaryTracerImage
+					--TracerImage.Enabled = false				
+							
+					--[[delay(0, function()		
+					TracerBeam.Enabled = true		
+					TracerImage.Enabled = true				
+					end)]]
+						
+					
+					local BV = Instance.new("BodyVelocity")
+					BV.Parent = TrueTracer
+					BV.maxForce = Vector3.new(math.huge,math.huge,math.huge)
+					BV.velocity = (DirectionUnit * (math.random(1000,2000) + machineGun.Velocity.magnitude))
+					
+					local PL				= Instance.new("PointLight")
+					PL.Parent				= TrueTracer
+					PL.Brightness			= 1
+					PL.Color				= BrickColor.new(TracerFlashColor).Color
+					PL.Range				= math.random(5,10)
+					PL.Shadows				= true
+					
+					if Settings.CloneFireSounds then
+						if LoadedAmmo.Value <= 5 and Settings.CanDryFire then
+						local DryFireClone = machineGun.DryFire:Clone()	DryFireClone.Parent = machineGun
+						DryFireClone:Play()	game.Debris:AddItem(DryFireClone,1)
+						Event:FireServer({["Function"] = "DryFireSound", ["Client"] = Player, ["ToClone"] = machineGun.DryFire, ["ToPutOn"] = machineGun, ["DecayTime"] = machineGun.DryFire.TimeLength})
+						end
+						if machineGun:findFirstChild("ClonedFire") then
+						machineGun:findFirstChild("ClonedFire"):Destroy()						
+						end
+						local FireClone = machineGun.Fire:Clone() FireClone.Name = "ClonedFire"
+						FireClone.Parent = machineGun FireClone:Play()
+						game.Debris:AddItem(FireClone,FireClone.TimeLength)
+						Event:FireServer({["Function"] = "FireSound", ["Client"] = Player, ["ToClone"] = machineGun.Fire, ["ToPutOn"] = machineGun, ["DecayTime"] = machineGun.Fire.TimeLength})
+						Event:FireServer({["Function"] = "DistantFireSound", ["Client"] = Player, ["ToClone"] = machineGun.DistantFireSound, ["ToPutOn"] = game.Workspace, ["DecayTime"] = machineGun.DistantFireSound.TimeLength})
+						else 
+						machineGun.Fire:Play() 
+						machineGun.DistantFireSound:Play()
+						if LoadedAmmo.Value <= 5 and Settings.CanDryFire then
+						machineGun.DryFire:Play()
+						end					
+					end
+					
+					local BarrelLight,BarrelGUI,FlashSize,ImageVis =
+						machineGun.Light:Clone(),machineGun.GUI:Clone(),
+						Settings.SecondaryFlashStandardSize,math.random(0,1)
+					if Settings.SecondaryFlashRandomSize then
+						FlashSize = math.random(Settings.SecondaryFlashMinSize,Settings.SecondaryFlashMaxSize)
+					end
+					if Settings.SecondaryFlashRotate then
+						BarrelGUI.Flash.Rotation = math.random(0,360)
+					else end				
+					BarrelGUI.Flash.Image = "rbxassetid://"..Settings.SecondaryFlashImage
+					BarrelGUI.Size = UDim2.new(FlashSize * 0.1,0,FlashSize * 0.1,0)
+					BarrelLight.Color = BrickColor.new(FlashColor).Color						
+					BarrelLight.Range = FlashSize
+					BarrelLight.Enabled = true BarrelGUI.Enabled = true
+					BarrelLight.Parent = machineGun BarrelGUI.Parent = machineGun			
+					game.Debris:AddItem(BarrelLight,0.005) game.Debris:AddItem(BarrelGUI,0.005)
+						
+					IgnoreList[#IgnoreList+1] = laser1
+					IgnoreList[#IgnoreList+1] = TrueTracer
+					
+					if hitPart then
+						if game.Lighting:FindFirstChild("GunSparks") then
+							local SparksFolder = game.Lighting.GunSparks:FindFirstChild(Settings.SecondaryEffectsFolder)
+							local SparkyBrick = Instance.new("Part")
+							SparkyBrick.Parent = game.Workspace
+							SparkyBrick.CanCollide = false
+							SparkyBrick.Anchored = true
+							SparkyBrick.Material = Enum.Material.Neon
+							SparkyBrick.BrickColor = BrickColor.new("Daisy orange")
+							SparkyBrick.Size = Vector3.new(.2,.2,.2)
+							SparkyBrick.Name = "SparkyBrick"
+							SparkyBrick.Transparency = 1
+							IgnoreList[#IgnoreList+1] = SparkyBrick
+							
+							local Meshy = math.random(2,3)
+							local SparkyMesh = Instance.new("SpecialMesh")
+							SparkyMesh.Parent = SparkyBrick
+							SparkyMesh.Name = "SBMesh"
+							SparkyMesh.MeshType = "Sphere"
+							SparkyMesh.Scale = Vector3.new(Meshy,Meshy,Meshy)
+							SparkyBrick.CFrame =  CFrame.new(machineGun.Position, hitPos)
+										* CFrame.new(0, 0, -length) * CFrame.Angles(math.rad(90),0,0);
+							Event:FireServer({["Function"] = "MakeSparks",["Client"] = Player,["Color"] = "Daisy orange",["HitPos"] = SparkyBrick.CFrame,["SparksFolder"] = SparksFolder,["Hit"] = hitPart})
+							
+							local Smoke = SparksFolder.Smoke:Clone() -- Default, Earth Objects
+							local Dust = SparksFolder.Dust:Clone()
+							--local SparkScript = SparksFolder.SparkScript:Clone()
+							
+							Smoke.Parent,Dust.Parent = SparkyBrick,SparkyBrick
+							Smoke.Enabled, Dust.Enabled = true, false
+							--SparkScript.Parent = SparkyBrick
+							--SparkScript.Disabled = false
+							
+							Smoke.EmissionDirection = "Top"
+							Dust.EmissionDirection = "Top"
+							
+							delay(0.1, function()Smoke.Enabled = false Dust.Enabled = false end)
+							
+							if hitPart then
+								if hitPart.Name == "SparkyBrick" then
+									SparkyBrick.Position = hitPart.CFrame.Position
+								end				
+								if hitPart.Material == Enum.Material.CorrodedMetal or hitPart.Material == Enum.Material.Metal or hitPart.Material == Enum.Material.DiamondPlate or hitPart.Material == Enum.Material.SmoothPlastic and hitPart.Name ~= "Water" then
+								SparkyBrick.Transparency = 0
+								Smoke.Enabled, Dust.Enabled = false, false	
+								local Spark = SparksFolder.Spark:Clone()
+								local SparkyLight = SparksFolder.GunSparkLightCommon:Clone()
+								SparkyLight.Range = math.random(1,10)
+								SparkyLight.Color = BrickColor.new(FlashColor).Color
+								Spark.Parent = SparkyBrick
+								Spark.EmissionDirection = "Top"
+								SparkyLight.Parent = SparkyBrick
+								Spark.Enabled = true
+								SparkyLight.Enabled = true
+								delay(0.1, function()SparkyBrick.Transparency = 1 SparkyBrick.Material = hitPart.Material
+								Spark.Enabled = false SparkyLight.Enabled = false end)		
+								elseif hitPart.Material == Enum.Material.Brick or hitPart.Material == Enum.Material.Cobblestone or hitPart.Material == Enum.Material.Concrete or hitPart.Material == Enum.Material.Granite or hitPart.Material == Enum.Material.Slate or hitPart.Material == Enum.Material.Grass then
+								local HitPartColor = hitPart.Color
+								Dust.Color = ColorSequence.new(HitPartColor,HitPartColor)			
+								Dust.Enabled = true		
+								SparkyBrick.Material = hitPart.Material
+								SparkyBrick.Color = HitPartColor
+								elseif hitPart.Material == Enum.Material.Sand then
+								local HitPartColor = hitPart.Color
+								Dust.Color = ColorSequence.new(HitPartColor,HitPartColor)			
+								Smoke.Color = ColorSequence.new(HitPartColor,HitPartColor)			
+								Dust.Enabled = true	
+								SparkyBrick.Material = hitPart.Material
+								SparkyBrick.Color = HitPartColor
+								elseif hitPart.Name == "Water" then -- Water
+												
+								end
+								local humy = GetPlayer(hitPart)	
+								if humy then
+								local BloodEffect = SparksFolder.Blood:Clone()				
+								BloodEffect.Parent = SparkyBrick
+								BloodEffect.Enabled = true
+								delay(0.1, function()BloodEffect.Enabled = false end)			
+								end
+								
+								if hitPart.Parent.Parent:FindFirstChild("Damage") then
+									print("Hit")
+									if hitPart:findFirstChild("MM") then
+										if hitPart:findFirstChild("MM").Value <= math.random(Settings.SecondaryGunMinPen,Settings.SecondaryGunMaxPen) then			
+											--print("Shell 	d")
+											local HitCal = hitPart:findFirstChild("MM").Value
+											local HitSound = hitPart.Parent:findFirstChild("Pen")
+											local ClonedHitSound = HitSound:Clone()
+											ClonedHitSound.Parent = hitPart
+											--ClonedHitSound:play()
+											game.Debris:AddItem(ClonedHitSound, 1)
+											if hitPart.Parent.Parent:findFirstChild("Destroyed").Value == true then
+											Event:FireServer({["Function"] = "Penetrate",["Client"] = Player,["Hit"] = hitPart,["HitPos"] = hitPos,["HitSound"] = HitSound,["Color"] = FlashColor,["DecayTime"] = HitSound.TimeLength,["HitCal"] = HitCal,["MinP"] = Settings.SecondaryGunMinPen,["MaxP"] = Settings.SecondaryGunMaxPen,["MinD"] = Settings.SecondaryGunMinDam,["MaxD"] = Settings.SecondaryGunMaxDam,["CurrentDamage"] = 0,["IsDestroyed"] = true,["CanNotif"] = true,["ToolName"] = Settings.SecondaryGunName})
+											else
+											Event:FireServer({["Function"] = "Penetrate",["Client"] = Player,["Hit"] = hitPart,["HitPos"] = hitPos,["HitSound"] = HitSound,["Color"] = FlashColor,["DecayTime"] = HitSound.TimeLength,["HitCal"] = HitCal,["MinP"] = Settings.SecondaryGunMinPen,["MaxP"] = Settings.SecondaryGunMaxPen,["MinD"] = Settings.SecondaryGunMinDam,["MaxD"] = Settings.SecondaryGunMaxDam,["CurrentDamage"] = 0,["IsDestroyed"] = false,["CanNotif"] = false,["ToolName"] = Settings.SecondaryGunName})
+											end
+										elseif hitPart:findFirstChild("MM").Value > math.random(Settings.SecondaryGunMinPen,Settings.SecondaryGunMaxPen) then
+											--print("Shell Bounced")
+											local HitSound = hitPart.Parent:findFirstChild("Ric")
+											local ClonedHitSound = HitSound:Clone()
+											ClonedHitSound.Parent = hitPart
+											--ClonedHitSound:play()
+											game.Debris:AddItem(ClonedHitSound, 1)
+											Event:FireServer({["Function"] = "Bounce",["Client"] = Player,["Hit"] = hitPart,["HitPos"] = hitPos,["HitSound"] = HitSound,["Color"] = FlashColor,["DecayTime"] = HitSound.TimeLength})
+										end
+									end
+									if hitPart.Parent.Parent:findFirstChild("Damage").Value<0 and hitPart.Parent.Parent:findFirstChild("Destroyed").Value ~= true then
+												
+									end			
+								elseif hitPart.Name == "Blocky" then
+								--print("hitPart sum OP Sword xd")
+								local Slashing = hitPart.Parent.Parent:findFirstChild("Slashing").Value
+									if Slashing == true then
+										hitPart.Parent.Parent.EffectPosition:findFirstChild("Ric"):play()
+										--print("Shell Deflected")
+										local DeflectLight = hitPart.Parent.Parent.EffectPosition.PointLight:clone()
+										local DeflectSpark1 = hitPart.Parent.Parent.EffectPosition.Spark1:clone()
+										local DeflectSpark2 = hitPart.Parent.Parent.EffectPosition.Spark2:clone()
+										local DeflectSpark3 = hitPart.Parent.Parent.EffectPosition.GunSpark:clone()				
+										DeflectLight.Parent = hitPart.Parent.Parent.EffectPosition
+										DeflectSpark1.Parent = hitPart.Parent.Parent.EffectPosition
+										DeflectSpark2.Parent = hitPart.Parent.Parent.EffectPosition
+										DeflectSpark3.Parent = hitPart.Parent.Parent.EffectPosition								
+										DeflectLight.Enabled = true
+										DeflectSpark1.Enabled = true
+										DeflectSpark2.Enabled = true
+										DeflectSpark3.Enabled = true				
+										local DeflectScript = hitPart.Parent.Parent.Stats.GunDeflect:clone()
+										DeflectScript.Parent = hitPart.Parent.Parent.Stats
+										DeflectScript.Disabled = false								
+										game.Debris:AddItem(DeflectLight,.1)
+										game.Debris:AddItem(DeflectSpark1,.1)
+										game.Debris:AddItem(DeflectSpark2,.1)
+										game.Debris:AddItem(DeflectSpark3,.1)								
+									elseif Slashing == false then
+										print("Sword User hitPart")
+									end
+								elseif hitPart.Name == "D_Lampy" then
+									hitPart.LampDisabled.Value = true	
+								end
+								
+								if hitPart then
+									local hum = GetPlayer(hitPart)
+									local CurrentDamage = 0
+									local HeadShot = false
+									if hitPart.Parent.Name == "Head" or hitPart.Parent.Name == "Face" or 
+										hitPart.Parent.Name == "Helmet" or hitPart.Parent.Name == "Headgear" 
+										or (hitPart.Name == "Head" and hitPart:IsA("BasePart")) then
+										HeadShot = true
+									end
+									if length <= 25 then
+									CurrentDamage = Settings.SecondaryGunMaxPlayerDam
+										if HeadShot then
+										CurrentDamage = CurrentDamage * 2
+										end
+									elseif length > 25 then
+										CurrentDamage = Settings.SecondaryGunMaxPlayerDam - ((Settings.SecondaryGunMaxPlayerDam-Settings.SecondaryGunMinPlayerDam)*length*0.01)
+										if CurrentDamage < Settings.SecondaryGunMinPlayerDam then
+										CurrentDamage = Settings.SecondaryGunMinPlayerDam
+											if HeadShot then
+											CurrentDamage = CurrentDamage * 2
+											end
+										end
+									end		
+									if hum then
+										local Target = game.Players:GetPlayerFromCharacter(hum.Parent)
+										if not Settings.TeamKill and (Target and Target.TeamColor ~= Player.TeamColor) or Settings.TeamKill then
+											if hum.Health > 0 and GUI then
+												GUI.Hit.Rotation = math.random(1, 360)
+												GUI.Hit.Visible = true
+												delay(0.1, function()
+													GUI.Hit.Visible = false
+												end)
+											end
+											Event:FireServer({["Function"] = "Hurt",["Client"] = Player,["Victim"] = hum,["CurrentDamage"] = CurrentDamage,["HeadShot"] = HeadShot,["IsDead"] = false,["ToolName"] = Settings.SecondaryGunName})
+										end
+									end
+								end
+							end
+						end	
+					end	
+				end
+			end
+		end
+		wait(Settings.SecondaryGunFirerate)
+	end
+end
+
+function fire()
+end
+
+function fire2()
+end
+
+-- When Clicked
+function onButton1Down(mouse)
+	fire();
+	updateAmmo();
+	FiringGun = true
+	FireGuns(Parts.Parent.Guns)
+end
+
+function onButton1Up(mouse)
+	FiringGun = false
+end
+
+function onButton2Down(mouse)
+	if ToolIsEquipped then
+		if IsZoomed then
+			IsZoomed = false
+			game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+			game:GetService('UserInputService').MouseDeltaSensitivity = 1
+		else
+			IsZoomed = true
+			game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV2
+			game:GetService('UserInputService').MouseDeltaSensitivity = 0.25
+		end
+	end
+end
+
+function onButton2Up(mouse)
+	--[[if OnBarrelView then
+	IsZoomed = false
+	game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+	end]]
+end
+
+function DestroyDampenerCopies(Target)
+	local list = Target:GetChildren()
+	for i = 1, #list do			
+		if list[i].ClassName == "Script" and list[i].Name ~= "SecondaryOnlyTeamChanger" 
+		and list[i].Name ~= "SeatScript"
+		and list[i].Name ~= "VelocityDampener" then --If its a brick
+		
+		print(list[i].Name .. " Destroyed")
+		list[i].Disabled = true
+		list[i]:Destroy()			
+		
+		elseif list[i].ClassName == "Model" then --weld other models, except the gun
+			DestroyDampenerCopies(list[i])			
+		end
+	end	
+end
+
+function onMouseMoved(Mouse)
+	
+end
+
+rayPart					= Instance.new("Part")
+rayPart.Name			= "Ray"
+rayPart.Transparency	= 0.8
+rayPart.Anchored		= true
+rayPart.CanCollide		= false
+rayPart.TopSurface		= Enum.SurfaceType.Smooth
+rayPart.BottomSurface	= Enum.SurfaceType.Smooth
+rayPart.formFactor		= Enum.FormFactor.Custom
+rayPart.BrickColor		= BrickColor.new("Institutional white")
+rayPart.Reflectance		= 0
+rayPart.Material = Enum.Material.SmoothPlastic
+
+local mesh = create("BlockMesh"){Parent = rayPart, Name = "Mesh"}
+
+local CanFireMG = true
+
+local IgnoreList = {
+	Vehicle
+}
+
+function fireCoax()
+end
+
+function Lights(bool,Target)
+Event:FireServer({
+		["Function"] = "UpdateLight",
+		["Target"] = Target,
+		["Client"] = bool
+		})
+	
+local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "HeadLight" or list[i].Name == "RedLight" then	
+			if list[i]:FindFirstChild("Light") then		
+				if bool then
+					list[i].Light.Enabled = true
+					list[i].Material = Enum.Material.Neon
+				else
+					list[i].Light.Enabled = false
+					list[i].Material = Enum.Material.Metal	
+				end
+			end
+		elseif list[i].ClassName == "Model" then
+			Lights(bool,list[i])
+		end
+	end		
+end
+function onKeyDown(key)
+	if key == nil then return end
+	key = key:lower()			
+	if key == 'w' then
+		Accelerating = true
+		IncreaseSpd()
+	end
+	if key == 's' then
+		Decelerating = true
+		DecreaseSpd()
+	end
+	if key == 'a' then
+		GoingLeft = true
+	end
+	if key == 'd' then
+		GoingRight = true
+	end
+	if key == 'g' then
+		if CurrentGear == "DOWN" then
+			CurrentGear = "UP"
+			UpdateGear(Parts,CurrentGear)
+		elseif CurrentGear == "UP" then
+			CurrentGear = "DOWN"
+			UpdateGear(Parts,CurrentGear)
+		end
+	end
+	if key == 'c' then
+		FreeLook = true
+	end
+	if key == ' ' then
+		CanSnap = false
+	end
+	if key == 'f' then
+		if CanSwitchCams == true then
+			if OnBarrelView == false then
+			OnBarrelView = true
+			game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+			--print("OnBarrelView")
+			
+			PlayerMouse.Icon = "rbxassetid://2317073900"
+			IsZoomed = false
+			
+			CanSwitchCams = false
+			FreeLook = true 
+			wait(0.5)
+			CanSwitchCams = true 
+			FreeLook = false
+			--[[game.Workspace.CurrentCamera.CameraType = 'Custom'
+			UserInputService.MouseBehavior = 'Default'
+			
+			game.Workspace.CurrentCamera.CameraSubject = CameraPos]]
+			
+			elseif OnBarrelView == true then
+			OnBarrelView = false
+			game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+			--print("NOT OnBarrelView")
+			PlayerMouse.Icon = "rbxassetid://2317073900"
+			IsZoomed = false
+			
+			CanSwitchCams = false
+			FreeLook = true 
+			--wait(0.05) IGNORE THIS
+			CanSwitchCams = true 
+			FreeLook = false
+			--[[game.Workspace.CurrentCamera.CameraType = 'Custom'
+			UserInputService.MouseBehavior = 'Default'
+			
+			game.Workspace.CurrentCamera.CameraSubject = CameraPos2]]
+			end
+		else
+		end			
+	end
+end
+
+-- When key released
+function onKeyUp(key)
+	if key == nil then return end
+	key = key:lower()
+	if key == 'w' then
+		Accelerating = false
+	end
+	if key == 's' then
+		Decelerating = false
+	end
+	if key == 'a' then
+		GoingLeft = false
+	end
+	if key == 'd' then
+		GoingRight = false
+	end
+	if key == 'c' then
+		FreeLook = false
+	end
+	if key == ' ' then
+		CanSnap = true
+	end
+	if key == '' then
+		Parts.Engine.BodyGyro.MaxTorque = Vector3.new(0,0,0)
+		--flipping = false;
+	end
+	if key == '' then
+		script.Parent.Braking.Value = false
+		--braking = false;
+	end
+end
+
+------------
+
+function IncreaseSpd() --This function increases the speed
+	if ToolIsEquipped then
+		while Accelerating do
+			Engine.EngineSound.Pitch = (Engine.EngineSound.Pitch < Settings.EngineMaxPitch and Engine.EngineSound.Pitch + Settings.EnginePitchAdder or Settings.EngineMaxPitch)
+			Engine.EngineSound.Volume = (Engine.EngineSound.Volume < Settings.EngineMaxVolume and Engine.EngineSound.Volume + Settings.EngineVolumeAdder or Settings.EngineMaxVolume)
+			local LatestVolume = Engine.EngineSound.Volume
+			local LatestPitch = Engine.EngineSound.PlaybackSpeed
+			local LatestEmitterSize = Engine.EngineSound.EmitterSize
+			local LatestDistance = Engine.EngineSound.MaxDistance
+			Event:FireServer({["Function"] = "UpdateSound",
+				["Client"] = game.Players.LocalPlayer,
+				["TargetSound"] = Engine.EngineSound,
+				["LatestVolume"] = LatestVolume,
+				["LatestPitch"] = LatestPitch,
+				["LatestEmitterSize"] = LatestEmitterSize,
+				["LatestDistance"] = LatestDistance
+			})
+			
+			UpdateEngineEffects(Parts,true)
+			UpdateEngineLights(Parts,true)
+						
+			--MainParts.Burner.PE.Rate = (MainParts.Burner.PE.Rate < 41 and MainParts.Burner.PE.Rate +2.5 or 41)
+			Throttle = (Throttle < 1 and Throttle + 0.01 or 1)
+			DesiredSpeed = MaxSpeed * Throttle
+			wait(0.02)
+		end
+	end
+end
+
+function DecreaseSpd() --This function decreases the speed
+	if ToolIsEquipped then
+		while Decelerating do
+			Engine.EngineSound.Pitch = (Engine.EngineSound.Pitch > Settings.EngineMinPitch and Engine.EngineSound.Pitch - Settings.EnginePitchAdder or Settings.EngineMinPitch)
+			Engine.EngineSound.Volume = (Engine.EngineSound.Volume < Settings.EngineMaxVolume and Engine.EngineSound.Volume + Settings.EngineVolumeAdder or Settings.EngineMaxVolume)
+			local LatestVolume = Engine.EngineSound.Volume
+			local LatestPitch = Engine.EngineSound.PlaybackSpeed
+			local LatestEmitterSize = Engine.EngineSound.EmitterSize
+			local LatestDistance = Engine.EngineSound.MaxDistance
+			Event:FireServer({["Function"] = "UpdateSound",
+				["Client"] = game.Players.LocalPlayer,
+				["TargetSound"] = Engine.EngineSound,
+				["LatestVolume"] = LatestVolume,
+				["LatestPitch"] = LatestPitch,
+				["LatestEmitterSize"] = LatestEmitterSize,
+				["LatestDistance"] = LatestDistance
+			})
+			
+			UpdateEngineEffects(Parts,false)
+			UpdateEngineLights(Parts,false)
+			
+			--MainParts.Burner.PE.Rate = (MainParts.Burner.PE.Rate > 1 and MainParts.Burner.PE.Rate -2.5 or 1)
+			Throttle = (Throttle > 0 and Throttle - 0.01 or 0)
+			DesiredSpeed = MaxSpeed * Throttle
+			wait(0.02)
+		end
+	end
+end
+
+function RoundNumber(Num) --This function rounds a number to the nearest whole number
+	return ((Num - math.floor(Num)) >= 0.5 and math.ceil(Num) or math.floor(Num))
+end
+
+function GetRoll(CF) --This function gets the rotation of the Engine. Credit to DevAdrian for this
+	local CFRight = CF * CFrame.Angles(0,math.rad(90),0)
+	local CFNoRollRight = CFrame.new(CF.p,CF.p + CF.lookVector) * CFrame.Angles(0,math.rad(90),0)
+	local CFDiff = CFRight:toObjectSpace(CFNoRollRight)
+	return (-math.atan2(CFDiff.lookVector.Y, CFDiff.lookVector.Z) % (math.pi * 2) + math.pi)
+end
+
+function GetPitch(CF) --This function gets the pitch of the Engine. Credit to DevAdrian for this
+	local LV = CF.lookVector
+	local XZDist = math.sqrt(LV.x ^ 2 + LV.z ^ 2)
+	return math.atan(LV.y / XZDist)
+end
+
+function DetectLand()
+	if ToolIsEquipped then
+		local Offset = (Source.CFrame * CFrame.new(0,100,0).p
+						- Source.Position).unit * Settings.LandDetectionDistance;
+		local Raycasted = Ray.new(Source.Position, Offset);	
+	--	local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+		local Hit, HitPos = workspace:FindPartOnRayWithIgnoreList(Raycasted, IgnoreList);
+		local Distance = (HitPos - Source.Position).magnitude;	
+		local DirectionUnit = (HitPos - Source.Position).unit	
+		if Hit and Hit.Anchored == true then
+			if CanCrash == true then
+			PullUpWarning = true
+			end			
+		elseif Hit and Hit.Anchored == false then
+			PullUpWarning = false
+		elseif not Hit then
+			PullUpWarning = false
+		end
+	end
+end
+
+function UpdateCamera() --This function uses the RunService to update the camera. It happens very fast so it is smooth
+	updateAmmo()
+	if ToolIsEquipped == true and Crashed == false then
+		CalculateSpeed()
+		if FreeLook == true then
+			if OnBarrelView == true then
+				Player.CameraMode = Enum.CameraMode.Classic
+				PlayerCam.CameraType = "Custom"
+				Player.CameraMaxZoomDistance = 0.5
+				Player.CameraMinZoomDistance = 0.5
+				game.Workspace.CurrentCamera.CameraSubject = Player.Character.Humanoid
+			elseif OnBarrelView == false then
+				Player.CameraMode = Enum.CameraMode.Classic
+				PlayerCam.CameraType = "Custom"
+				game.Workspace.CurrentCamera.CameraSubject = Engine
+				local CamOffset = Settings.CameraZOffset2
+				if CamOffset < 0 then
+					CamOffset = CamOffset * -1
+				end			
+				Player.CameraMaxZoomDistance = CamOffset
+				Player.CameraMinZoomDistance = CamOffset
+			end
+		elseif FreeLook == false then
+			if OnBarrelView == true then
+				Player.CameraMode = Enum.CameraMode.Classic
+				PlayerCam.CameraType = "Custom"
+				Player.CameraMaxZoomDistance = 0.5
+				Player.CameraMinZoomDistance = 0.5
+				game.Workspace.CurrentCamera.CameraSubject = Player.Character.Humanoid
+				PlayerCam.CameraType = Enum.CameraType.Scriptable
+				local HeadCF = Player.Character.Head.CFrame
+				local PlaneSize = Vehicle:GetModelSize().magnitude/3
+				local Origin = HeadCF.p
+				local Target = HeadCF.p + (HeadCF.lookVector)
+				PlayerCam.CoordinateFrame = CFrame.new(Origin,Target)
+				PlayerCam:SetRoll(2 * math.pi - GetRoll(HeadCF))
+				
+			elseif OnBarrelView == false then
+				Player.CameraMode = Enum.CameraMode.Classic
+				PlayerCam.CameraType = Enum.CameraType.Scriptable
+				game.Workspace.CurrentCamera.CameraSubject = CameraPos
+				local CamOffset = Settings.CameraZOffset2
+				if CamOffset < 0 then
+					CamOffset = CamOffset * -1
+				end			
+				Player.CameraMaxZoomDistance = CamOffset
+				Player.CameraMinZoomDistance = CamOffset
+				local HeadCF = CameraPos.CFrame
+				local PlaneSize = Vehicle:GetModelSize().magnitude/3
+				local Origin = HeadCF.p + (HeadCF.lookVector * (PlaneSize + Settings.CameraZOffset2))
+				local Target = HeadCF.p + (HeadCF.lookVector * PlaneSize)
+				PlayerCam.CoordinateFrame = CFrame.new(Origin,Target)
+				PlayerCam:SetRoll(2 * math.pi - GetRoll(HeadCF))
+			end
+		end
+	end	
+end
+
+function UpdateTargetStats() --This function updates the stats about the Target
+	
+end
+
+function CalculateSpeed() --This function calculates the current speed
+	if CharHuma == nil then
+		PlayerCam.CameraType = "Custom"
+		Player.CameraMode = Enum.CameraMode.Classic
+		Player.CameraMaxZoomDistance = 400
+		Player.CameraMinZoomDistance = .5
+		game:GetService('UserInputService').MouseDeltaSensitivity = 1
+	end
+	CurrentSpeed = (CurrentSpeed < DesiredSpeed and CurrentSpeed + Acceleration or CurrentSpeed - Acceleration) --A simple ternary operation that calculates the currentspeed
+	CurrentSpeed = (CurrentSpeed < 0 and 0 or CurrentSpeed > MaxSpeed and MaxSpeed or CurrentSpeed) --This fixes the currentspeed
+end
+
+function GetLowestPoint() --This function gets the lowest point of the plane (Credit to Crazyman32 for this)
+	if (#LandingGear == 0) then
+		LowestPoint = (Engine.Position.Y + 5 + (Engine.Size.Y/2))
+		return
+	end
+	for _,v in pairs(LandingGear) do
+		local Set0 = (Engine.Position.Y - (v.CFrame * CFrame.new((v.Size.X/2),0,0)).Y)
+		local Set1 = (Engine.Position.Y - (v.CFrame * CFrame.new(-(v.Size.X/2),0,0)).Y)
+		local Set2 = (Engine.Position.Y - (v.CFrame * CFrame.new(0,(v.Size.Y/2),0)).Y)
+		local Set3 = (Engine.Position.Y - (v.CFrame * CFrame.new(0,-(v.Size.Y/2),0)).Y)
+		local Set4 = (Engine.Position.Y - (v.CFrame * CFrame.new(0,0,(v.Size.Z/2))).Y)
+		local Set5 = (Engine.Position.Y - (v.CFrame * CFrame.new(0,0,-(v.Size.Z/2))).Y)
+		local Max = (math.max(Set0,Set1,Set2,Set3,Set4,Set5) + 5)
+		LowestPoint = (Max > LowestPoint and Max or LowestPoint)
+	end
+end
+
+function GetBankAngle(M) --This function calculates the Bank Angle (Credit to Crazyman32 for this)
+	local VSX,X = M.ViewSizeX,M.X
+	local Ratio = (((VSX / 2) - X)/(VSX / 2))
+	Ratio = (Ratio < -1 and -1 or Ratio > 1 and 1 or Ratio)
+	return math.rad(Ratio * MaxBank)
+end
+
+function Taxi() --This function determines whether the plane is taxiing or not
+	local Ray = Ray.new(Engine.Position,Vector3.new(0,-LowestPoint,0))
+	return (TrueAirSpeed <= StallSpeed and game.Workspace:FindPartOnRay(Ray,Vehicle))
+end
+
+function Stall() --This function determines whether the plane is stalling or not
+	return (Engine.Position.Y > MaxAltitude) or TrueAirSpeed < StallSpeed
+end
+
+function UpdateGear(Target,Val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "GearBase" then
+			if list[i]:FindFirstChild("HCGear") then
+				if Val == "UP" then
+				list[i].HCGear.TargetAngle = Settings.GearUpAngle
+				elseif Val == "DOWN" then
+				list[i].HCGear.TargetAngle = Settings.GearDownAngle
+				end
+			end	
+		end
+	end
+end
+
+function UpdateEngineEffects(Target,ShouldAccel)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "EffectBase" then
+			if list[i]:FindFirstChild("PEEffectBase") then
+				list[i].PEEffectBase.Lifetime = NumberRange.new(Settings.EngineEffectMinLifetime,Settings.EngineEffectMaxLifetime)
+				if Should-l == true then
+					list[i].PEEffectBase.Rate = list[i].PEEffectBase.Rate + Settings.EngineEffectRateAdder
+					
+					if list[i].PEEffectBase.Rate >= Settings.EngineEffectMaxRate then
+						list[i].PEEffectBase.Rate = Settings.EngineEffectMaxRate 
+					end
+					if list[i].PEEffectBase.Speed.Max >= Settings.EngineEffectMaxSpeed then
+						list[i].PEEffectBase.Speed = NumberRange.new(Settings.EngineEffectMinSpeed,Settings.EngineEffectMaxSpeed)
+					else
+						list[i].PEEffectBase.Speed = NumberRange.new(Settings.EngineEffectMinSpeed,list[i].PEEffectBase.Speed.Max + Settings.EngineEffectSpeedAdder)
+					end
+				elseif ShouldAccel == false then
+					list[i].PEEffectBase.Rate = list[i].PEEffectBase.Rate - Settings.EngineEffectRateAdder
+					
+					if list[i].PEEffectBase.Rate <= Settings.EngineEffectMinRate then
+						list[i].PEEffectBase.Rate = Settings.EngineEffectMinRate 
+					end
+					if list[i].PEEffectBase.Speed.Max <= Settings.EngineEffectMinSpeed then
+						list[i].PEEffectBase.Speed = NumberRange.new(Settings.EngineEffectMinSpeed,Settings.EngineEffectMinSpeed)
+					else
+						list[i].PEEffectBase.Speed = NumberRange.new(Settings.EngineEffectMinSpeed,list[i].PEEffectBase.Speed.Max - Settings.EngineEffectSpeedAdder)
+					end
+				end
+			end	
+		end
+	end
+end
+
+function UpdateEngineLights(Target,ShouldAccel)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "EffectBase" then
+			if list[i]:FindFirstChild("PLEffectBase") then
+				if ShouldAccel == true then
+					list[i].PLEffectBase.Range = list[i].PLEffectBase.Range + Settings.EngineEffectLightRangeAdder
+					list[i].PLEffectBase.Brightness = list[i].PLEffectBase.Brightness + Settings.EngineEffectLightBrightnessAdder
+					
+					if list[i].PLEffectBase.Range >= Settings.EngineEffectLightMaxRange then
+						list[i].PLEffectBase.Range = Settings.EngineEffectLightMaxRange 
+					end
+					if list[i].PLEffectBase.Brightness >= Settings.EngineEffectLightMaxBrightness then
+						list[i].PLEffectBase.Brightness = Settings.EngineEffectLightMaxBrightness 
+					end					
+				elseif ShouldAccel == false then
+					list[i].PLEffectBase.Range = list[i].PLEffectBase.Range - Settings.EngineEffectLightRangeAdder
+					list[i].PLEffectBase.Brightness = list[i].PLEffectBase.Brightness - Settings.EngineEffectLightBrightnessAdder
+					
+					if list[i].PLEffectBase.Range <= 0 then
+						list[i].PLEffectBase.Range = 0 
+					end
+					if list[i].PLEffectBase.Brightness <= 0 then
+						list[i].PLEffectBase.Brightness = 0 
+					end
+				end
+			end	
+		end
+	end
+end
+
+function AnimateFlaps(Target,val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "FlapLBase" then
+			if list[i]:FindFirstChild("HCFlapL") then
+				list[i].HCFlapL.TargetAngle = -val
+			end	
+		elseif list[i].Name == "FlapRBase" then
+			if list[i]:FindFirstChild("HCFlapR") then
+				list[i].HCFlapR.TargetAngle = val
+			end	
+		end
+	end
+end
+
+function AnimateRudder(Target,val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "RudderBase" then
+			if list[i]:FindFirstChild("HCRudder") then
+				list[i].HCRudder.TargetAngle = val
+			end	
+		end
+	end
+end
+
+function AnimateElevator(Target,val)
+	local list = Target:GetChildren()
+	for i = 1, #list do
+		if list[i].Name == "ElevatorBase" then
+			if list[i]:FindFirstChild("HCEle") then
+				list[i].HCEle.TargetAngle = -val
+			end
+		elseif list[i].Name == "ElevatorLBase" then
+			if list[i]:FindFirstChild("HCEleL") then
+				list[i].HCEleL.TargetAngle = -val
+			end	
+		elseif list[i].Name == "ElevatorRBase" then
+			if list[i]:FindFirstChild("HCEleR") then
+				list[i].HCEleR.TargetAngle = -val
+			end	
+		end
+	end
+end
+
+function FlyMain(M) --This is the main flying function
+	if ToolIsEquipped and Crashed == false then
+		local BankAngle = GetBankAngle(M) --This uses the "GetBankAngle" function to calculate the Bank Angle
+		local Taxi,Stall = Taxi(),Stall()
+		
+		VSX,X = M.ViewSizeX,M.X
+		VSY,Y = M.ViewSizeY,M.Y
+		
+		local RatioX = math.rad(((VSX / 2) - X) / (VSX / 2))
+		local RatioY = math.rad(((VSY / 2) - Y) / (VSY / 2))
+		
+		local Rotation = 2 * math.pi - GetRoll(Engine.CFrame)
+		local YawRotation = math.rad(math.sin(Rotation * 2))
+		local YawSpeed = (math.abs(Rotation) > math.pi / 2 and YawRotation / 2 or YawRotation)
+		
+		local CurrentZoneX = (RatioX)*1000
+		local CurrentZoneY = (RatioY)*1000
+		
+		DeadZoneX = Settings.DeadzoneValueX
+		DeadZoneY = Settings.DeadzoneValueY
+						
+		if CurrentZoneX > DeadZoneX or CurrentZoneX < -DeadZoneX or CanSnap == false then
+			OnDeadZoneX = 0
+		else
+			if CanSnap == true then
+			RatioX = 0 -- Cursor is in the Deadzone
+			--YawRotation = 0
+			
+			OnDeadZoneX = 1
+			end
+		end
+		
+		if CurrentZoneY > DeadZoneY or CurrentZoneY < -DeadZoneY or CanSnap == false then
+			OnDeadZoneY = 0
+		else
+			if CanSnap == true then
+			RatioY = 0 -- Cursor is in the Deadzone
+			
+			OnDeadZoneY = 1
+			end
+		end
+		
+		if OnDeadZoneX == 1 or OnDeadZoneY == 1 then
+			--print(CurrentZoneX.." O "..CurrentZoneY)
+		else
+			--print(CurrentZoneX.." X "..CurrentZoneY)
+		end
+		
+		UpdateDeadZoneBox(GUI)
+			
+		
+		if GoingRight then								--Turning
+			CurrentTurn = CurrentTurn - Settings.VehicleTurnAdder
+			if Taxi then
+				if CurrentTurn < -Settings.VehicleTaxiTurnSpeed then
+					CurrentTurn = -Settings.VehicleTaxiTurnSpeed 
+				end
+			else
+				if CurrentTurn < -VehicleTurnSpeed then
+					CurrentTurn = -VehicleTurnSpeed
+				end
+			end
+		elseif GoingLeft then			
+			CurrentTurn = CurrentTurn + Settings.VehicleTurnAdder
+			if Taxi then
+				if CurrentTurn > Settings.VehicleTaxiTurnSpeed  then
+					CurrentTurn = Settings.VehicleTaxiTurnSpeed 
+				end
+			else
+				if CurrentTurn > VehicleTurnSpeed then
+					CurrentTurn = VehicleTurnSpeed
+				end
+			end
+		elseif not GoingLeft or not GoingRight then
+			if CurrentTurn > 0 then
+				CurrentTurn = CurrentTurn - Settings.VehicleTurnAdder
+				if CurrentTurn < 0 then
+					CurrentTurn = 0
+				end
+			elseif CurrentTurn < 0 then
+				CurrentTurn = CurrentTurn + Settings.VehicleTurnAdder
+				if CurrentTurn > 0 then
+					CurrentTurn = 0
+				end
+			elseif CurrentTurn == 0 then
+				CurrentTurn = 0
+			end
+		end
+		
+		if CurrentTurn > VehicleTurnSpeed then
+			CurrentTurn = VehicleTurnSpeed
+		elseif CurrentTurn < -VehicleTurnSpeed then
+			CurrentTurn = -VehicleTurnSpeed
+		end
+		
+		local RatioX2 = math.rad(((CurrentTurn / 2) - CurrentTurn) / (CurrentTurn / 2))
+		local YawSpeed2 = 15 * RatioX2 * (TrueAirSpeed / 100)
+		--[[Thrust.maxForce = Vector3.new(math.huge,0,math.huge)
+		Direction.maxTorque = Vector3.new(0,math.huge,0)
+		Direction.cframe = Engine.CFrame * CFrame.Angles(0,YawSpeed2,0)]]
+		
+		AnimateFlaps(Parts,math.deg(RatioX * 90))
+		AnimateElevator(Parts,math.deg(RatioY * 90))
+		AnimateRudder(Parts,math.deg((CurrentTurn*0.1)*	90))
+				
+		Engine.Thrust.velocity = (Engine.CFrame.lookVector * CurrentSpeed) + Vector3.new(0,0.15,0)
+				
+		if Taxi then
+			CanCrash = false
+			if (CurrentSpeed < 2) then
+				Thrust.maxForce = Vector3.new(0,0,0)
+				Direction.maxTorque = Vector3.new(0,0,0)
+			else
+				local VSX,X = M.ViewSizeX,M.X
+				local RatioX = math.rad(((VSX / 2) - X) / (VSX / 2))
+				local YawSpeed = 15 * RatioX * (TrueAirSpeed / 100)
+				Thrust.maxForce = Vector3.new(math.huge,0,math.huge)
+				Direction.maxTorque = Vector3.new(0,math.huge,0)
+				Direction.cframe = Engine.CFrame * CFrame.Angles(0,CurrentTurn,0)
+			end
+		else
+			if CurrentSpeed < StallSpeed then
+				Stalling = true
+			elseif CurrentSpeed > StallSpeed then
+				Stalling = false		
+			end	
+			CanCrash = true
+			DetectLand()
+			
+			Thrust.maxForce = ((not Stall) and HugeVector or Vector3.new(0,0,0))
+			Direction.maxTorque = HugeVector
+			
+			local SpeedScale = math.min((TrueAirSpeed / (MaxSpeed / 4)),1)
+			local PitchSpeed = VehiclePitchSpeed * SpeedScale
+			local RollSpeed = VehicleRollSpeed * SpeedScale
+			
+			Direction.cframe = Engine.CFrame * CFrame.Angles((RatioY*100) * PitchSpeed,CurrentTurn,(RatioX*100) * RollSpeed)
+			
+		end
+		if (Engine.Position.Y < MinAltitude) then --If there are altitude restrictions and you are below it...
+			CanCrash = true
+		end
+		TrueAirSpeed = Engine.Velocity.magnitude
+		
+		--UpdateGUI(Taxi,Stall) --This activates the "UpdateGUI" function
+	end
+end
+		
+------------
+
+function onDeselected(mouse)
+	OnBarrelView = false
+	IsZoomed = false
+	FreeLook = false
+	Accelerating = false
+	Decelerating = false
+	GoingRight = false
+	GoingLeft = false
+	for _,v in pairs(FTab) do --This disconnects all the connections. It prevents bugs
+		if v then
+			v:disconnect()
+			v = nil
+		end
+	end
+	if game.Players.LocalPlayer.Character.Humanoid then
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+		ResetCamZooms()
+		game.Workspace.CurrentCamera.CameraSubject = 
+			game.Players.LocalPlayer.Character.Humanoid
+	end
+	game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+	game:GetService('UserInputService').MouseDeltaSensitivity = 1
+	GUI.MainGUIAnimation.Disabled = true
+	GUI.MainGUIAnimation2.Disabled = false
+	print("Tank Tool Not Equipped")
+	myMouse = nil
+	ToolIsEquipped = false
+	--PlayerMouse.Icon = ""
+	if Player.PlayerGui:FindFirstChild("CameraFix") then
+		local CamFixer = Player.PlayerGui.CameraFix:Clone()
+		CamFixer.Parent = Player.PlayerGui
+		CamFixer.Disabled = false
+		game.Debris:AddItem(CamFixer,1)
+	end
+	
+end
+function onSelected(mouse)
+	if game.Players.LocalPlayer.Character.Humanoid then
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 0
+	end
+	myMouse = mouse;
+	
+	local Vehicle = Parts.Parent
+	
+	if Settings.IsGroupOnly == true or Settings.IsDivisionOnly == true then
+		local CanUse = CheckIfInGroup()
+		if CanUse == true then
+			
+		else
+			repeat wait() CheckIfInGroup() until CanUse == true
+		end
+	end
+	
+	--[[Vehicle.Parent = game.Players.LocalPlayer.Character
+	
+	game:GetService("RunService").RenderStepped:wait()	
+	
+	Vehicle.Parent = game.Workspace]]
+	
+	game.Workspace.CurrentCamera.CameraSubject = CameraPos
+	
+	local VelocityDampenerCode = math.random(10000,99999)
+	--[[local VelocityDampener = Parts.VehicleSeat.VelocityDampener:Clone()
+	VelocityDampener.Parent = Parts.VehicleSeat
+	VelocityDampener.Name = VelocityDampenerCode]]
+	
+	OnBarrelView = false
+	IsZoomed = false
+	game.Workspace.CurrentCamera.FieldOfView = Settings.GunnerScopeFOV1
+	
+	ToolIsEquipped = true
+	updateAmmo();
+	print("Tank Tool Equipped")
+	GUI.MainGUIAnimation.Disabled = false
+	GUI.MainGUIAnimation2.Disabled = true
+	--Parts.VehicleSeat:FindFirstChild(VelocityDampenerCode).Disabled = true
+	
+	if DivisionOnly == true or GroupOnly == true then
+	if DivisionOnly == true then
+		if Settings.DivisionRank > 0 then
+			DivisionRank = game.Players.LocalPlayer:GetRankInGroup(DivisionID)
+			if DivisionRank >= Settings.DivisionRank then
+				print("Div Rank sufficient")
+				DivRankSufficient = true
+				GroupRankSufficient = true
+				HasPermit = true
+			end			
+		end
+	end	
+	if GroupOnly == true then
+		if Settings.GroupRank > 0 then
+			GroupRank = game.Players.LocalPlayer:GetRankInGroup(GroupID)
+			if GroupRank >= Settings.GroupRank then
+				print("Group Rank sufficient")
+				DivRankSufficient = true
+				GroupRankSufficient = true
+				HasPermit = true
+			end			
+		end	
+	end
+	if Player.Backpack:FindFirstChild(Settings.ToolNameForBypass) then
+	print("Has Permit")
+	GroupRankSufficient = true
+	DivRankSufficient = true
+	HasPermit = true
+	else		
+	end
+	repeat wait() until
+	DivRankSufficient == true or GroupRankSufficient == true or HasPermit == true
+	end
+
+	if Active == true then
+		
+	end
+	
+	GetLowestPoint()
+	Engine.Direction.P = 1e4 or VehicleTurnSpeed
+	
+	--PlayerMouse.Icon = "rbxassetid://412054506";
+		
+	FTab[1] = mouse.Button1Down:connect(function() onButton1Down(mouse) end)
+	FTab[2] = mouse.Button1Up:connect(function() onButton1Up(mouse) end)
+	FTab[3] = mouse.Button2Down:connect(function() onButton2Down(mouse) end)
+	FTab[4] = mouse.Button2Up:connect(function() onButton2Up(mouse) end)
+	FTab[5] = mouse.KeyDown:connect(onKeyDown)
+	FTab[6] = mouse.KeyUp:connect(onKeyUp)
+	FTab[7] = RunService.RenderStepped:connect(function() onMouseMoved(mouse) end)
+	FTab[8] = RunService.RenderStepped:connect(function() FlyMain(mouse) end)
+	FTab[9] = RunService.RenderStepped:connect(UpdateCamera)
+	
+	UpdateCamera()
+end
+
+function ResetCamZooms()
+	PlayerCam.CameraType = "Custom"
+	Player.CameraMode = Enum.CameraMode.Classic
+	Player.CameraMaxZoomDistance = 400
+	Player.CameraMinZoomDistance = .5
+	game:GetService('UserInputService').MouseDeltaSensitivity = 1
+	game.Workspace.CurrentCamera.CameraSubject = 
+			game.Players.LocalPlayer.Character.Humanoid
+end
+
+script.Parent.Equipped:connect(onSelected)
+script.Parent.Unequipped:connect(onDeselected)
